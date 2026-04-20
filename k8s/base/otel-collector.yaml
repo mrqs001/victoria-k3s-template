@@ -29,10 +29,28 @@ data:
             - job_name: otel-collector
               scrape_interval: 15s
               static_configs:
-                - targets: ["0.0.0.0:8888"]
+                - targets: ["127.0.0.1:8888"]
+            - job_name: victoria-metrics
+              scrape_interval: 15s
+              static_configs:
+                - targets: ["victoria-metrics-http:8428"]
+            - job_name: victoria-logs
+              scrape_interval: 15s
+              static_configs:
+                - targets: ["victoria-logs-http:9428"]
+            - job_name: victoria-traces
+              scrape_interval: 15s
+              static_configs:
+                - targets: ["victoria-traces-http:10428"]
 
     processors:
-      batch: {}
+      memory_limiter:
+        check_interval: 2s
+        limit_mib: 256
+        spike_limit_mib: 64
+      batch:
+        send_batch_size: 1024
+        timeout: 5s
 
     exporters:
       otlphttp/victoriametrics:
@@ -41,6 +59,8 @@ data:
         encoding: proto
       otlphttp/victorialogs:
         logs_endpoint: http://victoria-logs-http:9428/insert/opentelemetry/v1/logs
+        headers:
+          VL-Stream-Fields: service.name,service.namespace,deployment.environment.name,k8s.namespace.name
       otlphttp/victoriatraces:
         traces_endpoint: http://victoria-traces-http:10428/insert/opentelemetry/v1/traces
 
@@ -49,15 +69,15 @@ data:
       pipelines:
         metrics:
           receivers: [otlp, prometheus]
-          processors: [batch]
+          processors: [memory_limiter, batch]
           exporters: [otlphttp/victoriametrics]
         logs:
           receivers: [otlp]
-          processors: [batch]
+          processors: [memory_limiter, batch]
           exporters: [otlphttp/victorialogs]
         traces:
           receivers: [otlp]
-          processors: [batch]
+          processors: [memory_limiter, batch]
           exporters: [otlphttp/victoriatraces]
 ---
 apiVersion: apps/v1

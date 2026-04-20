@@ -45,12 +45,12 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(demo_checkout_requests_total[5m]))",
+          "expr": "sum(rate({__name__=~\"demo_(checkout|inventory)_requests_total\"}[5m]))",
           "queryType": "timeSeriesQuery",
           "refId": "A"
         }
       ],
-      "title": "Checkout Request Rate",
+      "title": "Combined Request Rate",
       "type": "stat"
     },
     {
@@ -110,12 +110,104 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(demo_checkout_requests_total{outcome=\"error\"}[5m])) / clamp_min(sum(rate(demo_checkout_requests_total[5m])), 1e-9)",
+          "expr": "sum(rate({__name__=~\"demo_(checkout|inventory)_requests_total\",outcome=\"error\"}[5m])) / clamp_min(sum(rate({__name__=~\"demo_(checkout|inventory)_requests_total\"}[5m])), 1e-9)",
           "queryType": "timeSeriesQuery",
           "refId": "A"
         }
       ],
-      "title": "Checkout Error Rate",
+      "title": "Combined Error Rate",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "victoriametrics-metrics-datasource",
+        "uid": "vm"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(demo_checkout_inflight_requests)",
+          "queryType": "timeSeriesQuery",
+          "refId": "A"
+        }
+      ],
+      "title": "In-flight Checkouts",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "victoriametrics-metrics-datasource",
+        "uid": "vm"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(demo_checkout_value_cents_total[5m])) / 100",
+          "queryType": "timeSeriesQuery",
+          "refId": "A"
+        }
+      ],
+      "title": "Checkout Value Rate",
       "type": "stat"
     },
     {
@@ -135,10 +227,10 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 12,
-        "y": 0
+        "x": 0,
+        "y": 8
       },
-      "id": 3,
+      "id": 5,
       "options": {
         "legend": {
           "displayMode": "table",
@@ -152,13 +244,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(demo_checkout_duration_seconds_bucket[5m])) by (le, mode))",
-          "legendFormat": "{{mode}}",
+          "expr": "histogram_quantile(0.95, sum by (le, service) (rate({__name__=~\"demo_(checkout|inventory)_duration_seconds_bucket\"}[5m])))",
+          "legendFormat": "{{service}}",
           "queryType": "timeSeriesQuery",
           "refId": "A"
         }
       ],
-      "title": "Checkout P95 Latency",
+      "title": "P95 Latency by Service",
       "type": "timeseries"
     },
     {
@@ -170,59 +262,18 @@
         "defaults": {
           "color": {
             "mode": "palette-classic"
-          }
+          },
+          "unit": "reqps"
         },
         "overrides": []
       },
       "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 0,
-        "y": 8
-      },
-      "id": 4,
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "sum by (mode, outcome) (rate(demo_checkout_requests_total[5m]))",
-          "legendFormat": "{{mode}} {{outcome}}",
-          "queryType": "timeSeriesQuery",
-          "refId": "A"
-        }
-      ],
-      "title": "Checkout Throughput by Mode",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "victoriametrics-metrics-datasource",
-        "uid": "vm"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 9,
+        "h": 8,
         "w": 12,
         "x": 12,
         "y": 8
       },
-      "id": 5,
+      "id": 6,
       "options": {
         "legend": {
           "displayMode": "list",
@@ -236,13 +287,141 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum by (service, result) (increase(demo_redis_cache_hits_total[15m]))",
-          "legendFormat": "{{service}} {{result}}",
+          "expr": "sum by (service, mode, outcome) (rate({__name__=~\"demo_(checkout|inventory)_requests_total\"}[5m]))",
+          "legendFormat": "{{service}} {{mode}} {{outcome}}",
           "queryType": "timeSeriesQuery",
           "refId": "A"
         }
       ],
-      "title": "Redis Cache Hits",
+      "title": "Throughput by Service, Mode, and Outcome",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "victoriametrics-metrics-datasource",
+        "uid": "vm"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 16
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum by (service) (rate(demo_redis_cache_hits_total{result=\"hit\"}[5m])) / clamp_min(sum by (service) (rate(demo_redis_cache_hits_total[5m])), 1e-9)",
+          "legendFormat": "{{service}}",
+          "queryType": "timeSeriesQuery",
+          "refId": "A"
+        }
+      ],
+      "title": "Redis Cache Hit Ratio",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "victoriametrics-metrics-datasource",
+        "uid": "vm"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 16
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "demo_inventory_stock_level",
+          "legendFormat": "{{sku}}",
+          "queryType": "timeSeriesQuery",
+          "refId": "A"
+        }
+      ],
+      "title": "Inventory Stock by SKU",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "victoriametrics-metrics-datasource",
+        "uid": "vm"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 16
+      },
+      "id": 9,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum by (reason) (rate(demo_inventory_failures_total[5m]))",
+          "legendFormat": "{{reason}}",
+          "queryType": "timeSeriesQuery",
+          "refId": "A"
+        }
+      ],
+      "title": "Inventory Failures by Reason",
       "type": "timeseries"
     }
   ],
@@ -251,19 +430,20 @@
   "style": "dark",
   "tags": [
     "victoria",
-    "starter"
+    "demo",
+    "app"
   ],
   "templating": {
     "list": []
   },
   "time": {
-    "from": "now-15m",
+    "from": "now-30m",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "",
-  "title": "App Overview",
-  "uid": "victoria-app-overview",
-  "version": 1,
+  "title": "Demo App Overview",
+  "uid": "victoria-demo-app-overview",
+  "version": 2,
   "weekStart": ""
 }

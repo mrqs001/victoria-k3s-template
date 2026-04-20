@@ -13,17 +13,17 @@
         "uid": "vl"
       },
       "gridPos": {
-        "h": 3,
+        "h": 4,
         "w": 24,
         "x": 0,
         "y": 0
       },
       "id": 1,
       "options": {
-        "content": "<p>Use the <strong>TraceID</strong> derived field or the <strong>View trace</strong> correlation from any log line to jump into VictoriaTraces. The Jaeger datasource is also configured to query back into VictoriaLogs for the current trace.</p>",
+        "content": "<p>Logs are exported to VictoriaLogs through the OpenTelemetry Collector with low-cardinality stream fields and queryable fields such as <code>trace_id</code>, <code>span_id</code>, <code>service_name</code>, <code>event_name</code>, <code>status_code</code>, and workflow-specific fields like <code>order_id</code> and <code>sku</code>. Use the TraceID derived field or the View trace correlation to jump into VictoriaTraces.</p>",
         "mode": "html"
       },
-      "title": "Navigation",
+      "title": "How To Use This View",
       "type": "text"
     },
     {
@@ -32,10 +32,10 @@
         "uid": "vl"
       },
       "gridPos": {
-        "h": 15,
+        "h": 16,
         "w": 24,
         "x": 0,
-        "y": 3
+        "y": 4
       },
       "id": 2,
       "options": {
@@ -51,7 +51,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "service:in(\"checkout-api\",\"inventory-api\")",
+          "expr": "_time:1h service.name:in(\"checkout-api\",\"inventory-api\")",
           "maxLines": 500,
           "queryType": "instant",
           "refId": "A"
@@ -72,13 +72,13 @@
     "list": []
   },
   "time": {
-    "from": "now-15m",
+    "from": "now-1h",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "",
-  "title": "Logs and Trace Navigation",
+  "title": "Logs And Trace Navigation",
   "uid": "victoria-logs-navigation",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }

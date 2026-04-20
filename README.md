@@ -35,6 +35,7 @@ Grafana -> Jaeger datasource backed by VictoriaTraces
 The previous LGTM starter relied on Tempo exemplars for metric-to-trace jumps. VictoriaMetrics does not support exemplars, so this template leans on:
 
 - shared labels and trace IDs
+- low-cardinality log stream fields for VictoriaLogs
 - Grafana correlations
 - Grafana Explore across metrics, logs, and traces
 
@@ -102,6 +103,15 @@ This installs:
 
 The template also adds stable in-cluster `ClusterIP` services named `victoria-metrics-http`, `victoria-logs-http`, and `victoria-traces-http`. Those sit in front of the Helm-managed Victoria pods so the collector and Grafana use a predictable service path instead of relying on chart-specific headless service behavior.
 
+The OpenTelemetry Collector also scrapes internal `/metrics` endpoints from:
+
+- `checkout-api`
+- `inventory-api`
+- `otel-collector`
+- `victoria-metrics`
+- `victoria-logs`
+- `victoria-traces`
+
 Override points:
 
 ```bash
@@ -140,6 +150,13 @@ curl -X POST http://localhost:8000/api/checkout \
 make smoke
 ```
 
+The smoke test verifies the full telemetry contract:
+
+- a checkout request succeeds,
+- demo metrics appear in VictoriaMetrics,
+- correlated logs are queryable in VictoriaLogs by `trace_id`,
+- the trace is queryable in VictoriaTraces and contains both demo services.
+
 ## Optional Synthetic Traffic
 
 ```bash
@@ -174,6 +191,13 @@ The easiest way to adapt this to a real app is:
 3. Replace the demo manifests under `k8s/base/` with your services while keeping the collector and Victoria backends.
 
 The manifests intentionally avoid a hard-coded namespace so the bootstrap scripts can target any namespace.
+
+The demo services are intentionally instrumented as a template, not just as placeholders. They emit:
+
+- RED-style request metrics and business metrics
+- structured logs with trace and span IDs plus queryable workflow fields
+- explicit child spans and span events around cache and inventory work
+- low-cardinality resource attributes suitable for VictoriaLogs stream fields
 
 ## Official References Used For This Scaffold
 

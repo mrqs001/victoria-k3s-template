@@ -11,10 +11,12 @@ INTERVAL = float(os.getenv("LOADGEN_INTERVAL_SECONDS", "0.5"))
 
 def pick_mode() -> str:
     value = random.random()
-    if value < 0.7:
+    if value < 0.6:
         return "ok"
-    if value < 0.9:
+    if value < 0.8:
         return "slow"
+    if value < 0.92:
+        return "cache_cold"
     return "fail_inventory"
 
 
@@ -24,7 +26,7 @@ def main() -> None:
         payload = {
             "user_id": f"demo-user-{random.randint(1, 20)}",
             "sku": random.choice(["sku-1", "sku-2", "sku-3"]),
-            "quantity": 1,
+            "quantity": random.choice([1, 1, 1, 2]),
             "mode": mode,
         }
         try:

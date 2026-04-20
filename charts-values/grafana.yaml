@@ -57,9 +57,9 @@ datasources:
               description: Open request metrics for the log service
               config:
                 type: query
-                field: service
+                field: service_name
                 target:
-                  expr: 'sum(rate({__name__=~"demo_.*_requests_total",service="$${service}"}[5m]))'
+                  expr: 'sum(rate({__name__=~"demo_.*_requests_total",service="$${service_name}"}[5m]))'
                   queryType: timeSeriesQuery
       - name: VictoriaTraces
         uid: vt
@@ -73,11 +73,11 @@ datasources:
             spanEndTimeShift: '30s'
             tags:
               - key: service.name
-                value: service
+                value: service_name
             filterByTraceID: true
             filterBySpanID: false
             customQuery: true
-            query: 'service:="$${__span.tags["service.name"]}" AND trace_id:="$${__trace.traceId}"'
+            query: 'trace_id:="$${__trace.traceId}" AND span_id:="$${__trace.spanId}"'
           tracesToMetrics:
             datasourceUid: vm
             spanStartTimeShift: '-2m'

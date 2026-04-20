@@ -13,6 +13,9 @@ configMapGenerator:
   - name: grafana-dashboard-logs
     files:
       - grafana-dashboards/logs-explore.json
+  - name: grafana-dashboard-backend-health
+    files:
+      - grafana-dashboards/backend-health.json
 generatorOptions:
   disableNameSuffixHash: true
   labels:

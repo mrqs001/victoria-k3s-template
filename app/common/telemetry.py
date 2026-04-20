@@ -29,7 +29,11 @@ def _resource(service_name: str) -> Resource:
         {
             "service.name": service_name,
             "service.namespace": os.getenv("APP_SERVICE_NAMESPACE", "victoria-k3s-template"),
+            "service.version": os.getenv("APP_SERVICE_VERSION", "0.1.0"),
             "deployment.environment": os.getenv("APP_DEPLOYMENT_ENVIRONMENT", "local-k3s"),
+            "deployment.environment.name": os.getenv("APP_DEPLOYMENT_ENVIRONMENT", "local-k3s"),
+            "k8s.namespace.name": os.getenv("APP_K8S_NAMESPACE", "observability"),
+            "k8s.cluster.name": os.getenv("APP_K8S_CLUSTER_NAME", "local-k3s"),
         }
     )
 
@@ -98,18 +102,28 @@ def emit_log(
     message: str,
     **fields: Any,
 ) -> None:
+    timestamp = fields.pop("timestamp", "")
     payload = {
-        "timestamp": fields.pop("timestamp", None),
+        "timestamp": timestamp,
         "level": level.upper(),
         "service": service_name,
         "message": message,
+        "event_name": message,
         "trace_id": current_trace_id(),
         "span_id": current_span_id(),
         **fields,
     }
-    if payload["timestamp"] is None:
-        payload["timestamp"] = ""
-    getattr(logger, level.lower())(json.dumps(payload, sort_keys=True))
+    extra = {
+        "timestamp": payload["timestamp"],
+        "service_name": service_name,
+        "event_name": message,
+        "trace_id": payload["trace_id"],
+        "span_id": payload["span_id"],
+    }
+    for key, value in fields.items():
+        extra[key] = value if value is not None else ""
+
+    getattr(logger, level.lower())(json.dumps(payload, sort_keys=True), extra=extra)
 
 
 def mark_span_error(exc: Exception) -> None:

@@ -3,6 +3,8 @@ nameOverride: vms
 server:
   fullnameOverride: victoria-metrics
   retentionPeriod: 7d
+  extraArgs:
+    opentelemetry.usePrometheusNaming: "true"
   persistentVolume:
     enabled: true
     storageClassName: local-path
@@ -13,4 +15,3 @@ server:
       memory: 256Mi
     limits:
       memory: 1Gi
-

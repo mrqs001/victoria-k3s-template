@@ -8,7 +8,7 @@ import requests
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse, Response
 from opentelemetry import trace
-from prometheus_client import Counter, Histogram, REGISTRY
+from prometheus_client import Counter, Gauge, Histogram, REGISTRY
 from prometheus_client.openmetrics.exposition import CONTENT_TYPE_LATEST, generate_latest
 from pydantic import BaseModel, Field
 
@@ -42,6 +42,21 @@ redis_cache_hits_total = Counter(
     "Redis cache hits observed by the demo app",
     ["service", "result"],
 )
+checkout_inflight_requests = Gauge(
+    "demo_checkout_inflight_requests",
+    "Current number of in-flight checkout requests",
+    ["service"],
+)
+checkout_value_cents_total = Counter(
+    "demo_checkout_value_cents_total",
+    "Total checkout value processed by the demo app",
+    ["service", "mode"],
+)
+checkout_inventory_failures_total = Counter(
+    "demo_checkout_inventory_failures_total",
+    "Checkout failures grouped by inventory failure reason",
+    ["service", "reason"],
+)
 
 
 class CheckoutRequest(BaseModel):
@@ -74,6 +89,10 @@ def checkout(payload: CheckoutRequest) -> JSONResponse:
     cache_hit = False
     inventory_status = "unknown"
     outcome = "ok"
+    status_code = 200
+    price_cents = 0
+    cache_result = "miss"
+    failure_reason = ""
 
     current_span = trace.get_current_span()
     current_span.set_attribute("app.order_id", order_id)
@@ -81,6 +100,18 @@ def checkout(payload: CheckoutRequest) -> JSONResponse:
     current_span.set_attribute("app.sku", payload.sku)
     current_span.set_attribute("app.mode", payload.mode)
     current_span.set_attribute("app.quantity", payload.quantity)
+    current_span.set_attribute("app.operation", "checkout")
+    current_span.add_event(
+        "checkout.request.accepted",
+        {
+            "app.order_id": order_id,
+            "app.sku": payload.sku,
+            "app.mode": payload.mode,
+            "app.quantity": payload.quantity,
+        },
+    )
+
+    checkout_inflight_requests.labels(service=SERVICE_NAME).inc()
 
     emit_log(
         logger,
@@ -92,23 +123,34 @@ def checkout(payload: CheckoutRequest) -> JSONResponse:
         user_id=payload.user_id,
         sku=payload.sku,
         mode=payload.mode,
+        cache_result="pending",
         outcome="started",
+        status_code=0,
         error="",
     )
 
     try:
         with tracer.start_as_current_span("checkout.load_price_cache") as span:
             price_key = f"price:{payload.sku}"
+            if payload.mode == "cache_cold":
+                redis_client.delete(price_key)
             cached_price = redis_client.get(price_key)
             cache_hit = cached_price is not None
-            redis_cache_hits_total.labels(service=SERVICE_NAME, result="hit" if cache_hit else "miss").inc(
+            cache_result = "hit" if cache_hit else "miss"
+            redis_cache_hits_total.labels(service=SERVICE_NAME, result=cache_result).inc(
                 exemplar={"trace_id": current_trace_id()}
             )
             if not cache_hit:
                 cached_price = str(1999 + len(payload.sku) * 10)
                 redis_client.setex(price_key, 600, cached_price)
+            price_cents = int(cached_price)
             span.set_attribute("app.cache_hit", cache_hit)
-            span.set_attribute("app.price_cents", int(cached_price))
+            span.set_attribute("app.cache_result", cache_result)
+            span.set_attribute("app.price_cents", price_cents)
+            span.add_event(
+                "checkout.price_cache.loaded",
+                {"app.cache_result": cache_result, "app.price_cents": price_cents},
+            )
 
         with tracer.start_as_current_span("checkout.reserve_inventory") as span:
             response = requests.post(
@@ -126,20 +168,33 @@ def checkout(payload: CheckoutRequest) -> JSONResponse:
             inventory_status = inventory_payload.get("inventory_status", "unknown")
             span.set_attribute("http.status_code", response.status_code)
             span.set_attribute("app.inventory_status", inventory_status)
+            span.add_event(
+                "checkout.inventory.response",
+                {"http.status_code": response.status_code, "app.inventory_status": inventory_status},
+            )
             if response.status_code >= 400:
                 raise requests.HTTPError(response.text, response=response)
 
+        checkout_value_cents_total.labels(service=SERVICE_NAME, mode=payload.mode).inc(
+            price_cents,
+            exemplar={"trace_id": current_trace_id() or trace_id},
+        )
         response_payload = {
             "order_id": order_id,
             "status": "ok",
             "trace_id": current_trace_id() or trace_id,
             "inventory_status": inventory_status,
             "cache_hit": cache_hit,
+            "price_cents": price_cents,
         }
-        status_code = 200
     except Exception as exc:
         outcome = "error"
         inventory_status = "failed"
+        status_code = 502
+        failure_reason = "downstream_inventory_error"
+        checkout_inventory_failures_total.labels(service=SERVICE_NAME, reason=failure_reason).inc(
+            exemplar={"trace_id": current_trace_id() or trace_id}
+        )
         mark_span_error(exc)
         emit_log(
             logger,
@@ -151,7 +206,11 @@ def checkout(payload: CheckoutRequest) -> JSONResponse:
             user_id=payload.user_id,
             sku=payload.sku,
             mode=payload.mode,
+            cache_result=cache_result,
             outcome=outcome,
+            status_code=status_code,
+            inventory_status=inventory_status,
+            failure_reason=failure_reason,
             error=str(exc),
         )
         response_payload = {
@@ -160,8 +219,8 @@ def checkout(payload: CheckoutRequest) -> JSONResponse:
             "trace_id": current_trace_id() or trace_id,
             "inventory_status": inventory_status,
             "cache_hit": cache_hit,
+            "price_cents": price_cents,
         }
-        status_code = 502
     finally:
         duration = time.perf_counter() - started
         exemplar = {"trace_id": current_trace_id() or trace_id}
@@ -170,6 +229,7 @@ def checkout(payload: CheckoutRequest) -> JSONResponse:
             duration,
             exemplar=exemplar,
         )
+        checkout_inflight_requests.labels(service=SERVICE_NAME).dec()
         emit_log(
             logger,
             SERVICE_NAME,
@@ -180,10 +240,14 @@ def checkout(payload: CheckoutRequest) -> JSONResponse:
             user_id=payload.user_id,
             sku=payload.sku,
             mode=payload.mode,
+            cache_result=cache_result,
             outcome=outcome,
+            status_code=status_code,
             error="" if outcome == "ok" else "checkout_failed",
             inventory_status=inventory_status,
             cache_hit=cache_hit,
+            price_cents=price_cents,
+            failure_reason=failure_reason,
             duration_ms=round(duration * 1000, 2),
         )
 

@@ -6,7 +6,7 @@ import redis
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse, Response
 from opentelemetry import trace
-from prometheus_client import Counter, Histogram, REGISTRY
+from prometheus_client import Counter, Gauge, Histogram, REGISTRY
 from prometheus_client.openmetrics.exposition import CONTENT_TYPE_LATEST, generate_latest
 from pydantic import BaseModel, Field
 
@@ -38,6 +38,16 @@ redis_cache_hits_total = Counter(
     "Redis cache hits observed by the demo app",
     ["service", "result"],
 )
+inventory_stock_level = Gauge(
+    "demo_inventory_stock_level",
+    "Current remaining stock per sku",
+    ["service", "sku"],
+)
+inventory_failures_total = Counter(
+    "demo_inventory_failures_total",
+    "Inventory failures grouped by reason",
+    ["service", "reason"],
+)
 
 
 class ReservationRequest(BaseModel):
@@ -48,6 +58,10 @@ class ReservationRequest(BaseModel):
     mode: str = Field(default="ok")
 
 
+def set_stock_gauge(sku: str, amount: int) -> None:
+    inventory_stock_level.labels(service=SERVICE_NAME, sku=sku).set(amount)
+
+
 @app.on_event("startup")
 def on_startup() -> None:
     redis_client.ping()
@@ -55,6 +69,7 @@ def on_startup() -> None:
         key = f"stock:{sku}"
         if redis_client.get(key) is None:
             redis_client.set(key, 200)
+        set_stock_gauge(sku, int(redis_client.get(key) or 0))
 
 
 @app.get("/healthz")
@@ -73,6 +88,10 @@ def reserve(payload: ReservationRequest) -> JSONResponse:
     outcome = "ok"
     inventory_status = "reserved"
     trace_id = current_trace_id()
+    status_code = 200
+    stock_before = 0
+    stock_after = 0
+    failure_reason = ""
 
     current_span = trace.get_current_span()
     current_span.set_attribute("app.order_id", payload.order_id)
@@ -80,6 +99,16 @@ def reserve(payload: ReservationRequest) -> JSONResponse:
     current_span.set_attribute("app.sku", payload.sku)
     current_span.set_attribute("app.mode", payload.mode)
     current_span.set_attribute("app.quantity", payload.quantity)
+    current_span.set_attribute("app.operation", "inventory_reservation")
+    current_span.add_event(
+        "inventory.request.accepted",
+        {
+            "app.order_id": payload.order_id,
+            "app.sku": payload.sku,
+            "app.mode": payload.mode,
+            "app.quantity": payload.quantity,
+        },
+    )
 
     emit_log(
         logger,
@@ -92,6 +121,7 @@ def reserve(payload: ReservationRequest) -> JSONResponse:
         sku=payload.sku,
         mode=payload.mode,
         outcome="started",
+        status_code=0,
         error="",
     )
 
@@ -107,6 +137,7 @@ def reserve(payload: ReservationRequest) -> JSONResponse:
         with tracer.start_as_current_span("inventory.redis_reservation") as span:
             stock_key = f"stock:{payload.sku}"
             current_stock = int(redis_client.get(stock_key) or 0)
+            stock_before = current_stock
             redis_cache_hits_total.labels(service=SERVICE_NAME, result="hit").inc(
                 exemplar={"trace_id": current_trace_id()}
             )
@@ -114,7 +145,9 @@ def reserve(payload: ReservationRequest) -> JSONResponse:
                 raise RuntimeError("insufficient stock")
 
             remaining = current_stock - payload.quantity
+            stock_after = remaining
             redis_client.set(stock_key, remaining)
+            set_stock_gauge(payload.sku, remaining)
             redis_client.hset(
                 f"reservation:{payload.order_id}",
                 mapping={
@@ -126,16 +159,26 @@ def reserve(payload: ReservationRequest) -> JSONResponse:
             )
             span.set_attribute("app.stock_before", current_stock)
             span.set_attribute("app.stock_after", remaining)
+            span.add_event(
+                "inventory.stock.updated",
+                {"app.stock_before": current_stock, "app.stock_after": remaining},
+            )
 
         response_payload = {
             "order_id": payload.order_id,
             "inventory_status": inventory_status,
             "trace_id": current_trace_id() or trace_id,
+            "stock_before": stock_before,
+            "stock_after": stock_after,
         }
-        status_code = 200
     except Exception as exc:
         outcome = "error"
         inventory_status = "failed"
+        status_code = 503
+        failure_reason = str(exc).lower().replace(" ", "_") or type(exc).__name__.lower()
+        inventory_failures_total.labels(service=SERVICE_NAME, reason=failure_reason).inc(
+            exemplar={"trace_id": current_trace_id() or trace_id}
+        )
         mark_span_error(exc)
         emit_log(
             logger,
@@ -148,14 +191,19 @@ def reserve(payload: ReservationRequest) -> JSONResponse:
             sku=payload.sku,
             mode=payload.mode,
             outcome=outcome,
+            status_code=status_code,
+            failure_reason=failure_reason,
+            stock_before=stock_before,
+            stock_after=stock_after,
             error=str(exc),
         )
         response_payload = {
             "order_id": payload.order_id,
             "inventory_status": inventory_status,
             "trace_id": current_trace_id() or trace_id,
+            "stock_before": stock_before,
+            "stock_after": stock_after,
         }
-        status_code = 503
     finally:
         duration = time.perf_counter() - started
         exemplar = {"trace_id": current_trace_id() or trace_id}
@@ -175,8 +223,12 @@ def reserve(payload: ReservationRequest) -> JSONResponse:
             sku=payload.sku,
             mode=payload.mode,
             outcome=outcome,
+            status_code=status_code,
             error="" if outcome == "ok" else "inventory_failed",
             inventory_status=inventory_status,
+            stock_before=stock_before,
+            stock_after=stock_after,
+            failure_reason=failure_reason,
             duration_ms=round(duration * 1000, 2),
         )
 

@@ -3,6 +3,8 @@ nameOverride: vts
 server:
   fullnameOverride: victoria-traces
   retentionPeriod: 7d
+  extraArgs:
+    servicegraph.enableTask: "true"
   persistentVolume:
     enabled: true
     storageClassName: local-path
@@ -13,4 +15,3 @@ server:
       memory: 256Mi
     limits:
       memory: 1Gi
-
