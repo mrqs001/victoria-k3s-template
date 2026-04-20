@@ -41,7 +41,7 @@ helm_cmd() {
 need_cmd kubectl
 need_cmd docker
 
-kubectl get namespace "$NAMESPACE" >/dev/null 2>&1 || kubectl apply -f k8s/base/namespace.yaml
+kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 
 helm_cmd repo add vm https://victoriametrics.github.io/helm-charts/
 helm_cmd repo add grafana https://grafana.github.io/helm-charts
@@ -68,7 +68,7 @@ helm_cmd upgrade --install grafana grafana/grafana \
   --wait \
   -f charts-values/grafana.yaml
 
-kubectl apply -k k8s/base
+./scripts/kustomize-render.sh k8s/base | kubectl -n "$NAMESPACE" apply -f -
 
 kubectl -n "$NAMESPACE" rollout status deployment/redis --timeout=180s
 kubectl -n "$NAMESPACE" rollout status deployment/otel-collector --timeout=180s

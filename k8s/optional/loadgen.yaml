@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: loadgen
-          image: ghcr.io/mrqs001/victoria-k3s-template-demo-app:main
+          image: demo-app:latest
           imagePullPolicy: Always
           command: ["python", "-m", "loadgen.main"]
           env:

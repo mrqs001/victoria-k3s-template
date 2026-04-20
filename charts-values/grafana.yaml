@@ -29,9 +29,63 @@ datasources:
         type: victoriametrics-logs-datasource
         access: proxy
         url: http://victoria-logs:9428
+        jsonData:
+          derivedFields:
+            - name: TraceID
+              matcherType: label
+              matcherRegex: trace_id
+              datasourceUid: vt
+              url: '$${__value.raw}'
+              urlDisplayLabel: View trace
+          correlations:
+            - targetUID: vt
+              label: View trace
+              description: Open trace by trace_id
+              config:
+                type: query
+                field: trace_id
+                target:
+                  query: '$${trace_id}'
+            - targetUID: vm
+              label: View service metrics
+              description: Open request metrics for the log service
+              config:
+                type: query
+                field: service
+                target:
+                  expr: 'sum(rate({__name__=~"demo_.*_requests_total",service="$${service}"}[5m]))'
+                  queryType: timeSeriesQuery
       - name: VictoriaTraces
         uid: vt
         type: jaeger
         access: proxy
         url: http://victoria-traces:10428/select/jaeger
+        jsonData:
+          tracesToLogsV2:
+            datasourceUid: vl
+            spanStartTimeShift: '-30s'
+            spanEndTimeShift: '30s'
+            tags:
+              - key: service.name
+                value: service
+            filterByTraceID: true
+            filterBySpanID: false
+            customQuery: true
+            query: 'service:="$${__span.tags["service.name"]}" AND trace_id:="$${__trace.traceId}"'
+          tracesToMetrics:
+            datasourceUid: vm
+            spanStartTimeShift: '-2m'
+            spanEndTimeShift: '2m'
+            tags:
+              - key: service.name
+                value: service
+            queries:
+              - name: Request rate
+                query: 'sum(rate({__name__=~"demo_.*_requests_total",$$__tags}[5m]))'
+              - name: Error rate
+                query: 'sum(rate({__name__=~"demo_.*_requests_total",outcome="error",$$__tags}[5m]))'
 
+sidecar:
+  dashboards:
+    enabled: true
+    searchNamespace: null

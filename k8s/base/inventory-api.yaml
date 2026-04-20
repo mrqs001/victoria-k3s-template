@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: inventory-api
-          image: ghcr.io/mrqs001/victoria-k3s-template-demo-app:main
+          image: demo-app:latest
           imagePullPolicy: Always
           command: ["uvicorn", "inventory_api.main:app", "--host", "0.0.0.0", "--port", "8001"]
           env:
@@ -65,4 +65,3 @@ spec:
     - name: http
       port: 8001
       targetPort: http
-

@@ -100,6 +100,14 @@ This installs:
 - `checkout-api`
 - `inventory-api`
 
+Override points:
+
+```bash
+NAMESPACE=my-observability APP_IMAGE=ghcr.io/my-user/my-app:main make bootstrap
+```
+
+`APP_IMAGE` defaults to the demo image published by this repository. That makes it straightforward to reuse this repo with your own prebuilt service image later.
+
 ### 4. Expose the app and Grafana locally
 
 In separate terminals:
@@ -155,6 +163,16 @@ This repo is intentionally local-first:
 
 That keeps it easy to understand, easy to run, and easy to adapt into a real app base later.
 
+## Reuse Notes
+
+The easiest way to adapt this to a real app is:
+
+1. Build and publish your own image.
+2. Set `APP_IMAGE=ghcr.io/you/your-image:tag`.
+3. Replace the demo manifests under `k8s/base/` with your services while keeping the collector and Victoria backends.
+
+The manifests intentionally avoid a hard-coded namespace so the bootstrap scripts can target any namespace.
+
 ## Official References Used For This Scaffold
 
 - k3s quick start: https://docs.k3s.io/quick-start
@@ -164,4 +182,3 @@ That keeps it easy to understand, easy to run, and easy to adapt into a real app
 - VictoriaMetrics Grafana datasource: https://docs.victoriametrics.com/victoriametrics/integrations/grafana/datasource/
 - VictoriaLogs Grafana datasource: https://docs.victoriametrics.com/victorialogs/integrations/grafana/
 - VictoriaTraces in Grafana via Jaeger datasource: https://docs.victoriametrics.com/victoriatraces/querying/grafana/
-

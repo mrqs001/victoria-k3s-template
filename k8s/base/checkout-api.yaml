@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: checkout-api
-          image: ghcr.io/mrqs001/victoria-k3s-template-demo-app:main
+          image: demo-app:latest
           imagePullPolicy: Always
           command: ["uvicorn", "checkout_api.main:app", "--host", "0.0.0.0", "--port", "8000"]
           env:
@@ -67,4 +67,3 @@ spec:
     - name: http
       port: 8000
       targetPort: http
-

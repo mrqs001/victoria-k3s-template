@@ -27,8 +27,7 @@ port-forward-checkout:
 	kubectl -n $(NAMESPACE) port-forward svc/checkout-api 8000:8000
 
 loadgen-up:
-	kubectl apply -k k8s/optional
+	./scripts/kustomize-render.sh k8s/optional | kubectl -n $(NAMESPACE) apply -f -
 
 loadgen-down:
-	kubectl delete -k k8s/optional --ignore-not-found
-
+	./scripts/kustomize-render.sh k8s/optional | kubectl -n $(NAMESPACE) delete --ignore-not-found -f -
