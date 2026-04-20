@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loadgen
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: loadgen
+  template:
+    metadata:
+      labels:
+        app: loadgen
+    spec:
+      containers:
+        - name: loadgen
+          image: ghcr.io/mrqs001/victoria-k3s-template-demo-app:main
+          imagePullPolicy: Always
+          command: ["python", "-m", "loadgen.main"]
+          env:
+            - name: LOADGEN_TARGET_URL
+              value: http://checkout-api:8000/api/checkout
+            - name: LOADGEN_INTERVAL_SECONDS
+              value: "0.5"
+            - name: PYTHONUNBUFFERED
+              value: "1"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi

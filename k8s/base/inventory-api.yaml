@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inventory-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: inventory-api
+  template:
+    metadata:
+      labels:
+        app: inventory-api
+    spec:
+      containers:
+        - name: inventory-api
+          image: ghcr.io/mrqs001/victoria-k3s-template-demo-app:main
+          imagePullPolicy: Always
+          command: ["uvicorn", "inventory_api.main:app", "--host", "0.0.0.0", "--port", "8001"]
+          env:
+            - name: APP_SERVICE_NAME
+              value: inventory-api
+            - name: APP_PORT
+              value: "8001"
+            - name: APP_REDIS_URL
+              value: redis://redis:6379/1
+            - name: APP_OTLP_GRPC_ENDPOINT
+              value: http://otel-collector:4317
+            - name: APP_SERVICE_NAMESPACE
+              value: victoria-k3s-template
+            - name: APP_DEPLOYMENT_ENVIRONMENT
+              value: local-k3s
+            - name: PYTHONUNBUFFERED
+              value: "1"
+          ports:
+            - containerPort: 8001
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: inventory-api
+spec:
+  selector:
+    app: inventory-api
+  ports:
+    - name: http
+      port: 8001
+      targetPort: http
+

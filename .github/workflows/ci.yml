@@ -1,0 +1,53 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Compile Python sources
+        run: python -m compileall app
+
+      - name: Install YAML dependency
+        run: python -m pip install pyyaml
+
+      - name: Build demo app image
+        run: docker build -f app/Dockerfile -t victoria-k3s-template-demo-app:ci .
+
+      - name: Validate Helm values render
+        run: |
+          docker run --rm --entrypoint sh -v "$PWD:/work" -w /work alpine/helm:3.17.3 -lc '
+            helm repo add vm https://victoriametrics.github.io/helm-charts/ >/dev/null
+            helm repo add grafana https://grafana.github.io/helm-charts >/dev/null
+            helm repo update >/dev/null
+            helm template vms vm/victoria-metrics-single -n observability -f charts-values/victoria-metrics-single.yaml >/dev/null
+            helm template vls vm/victoria-logs-single -n observability -f charts-values/victoria-logs-single.yaml >/dev/null
+            helm template vts vm/victoria-traces-single -n observability -f charts-values/victoria-traces-single.yaml >/dev/null
+            helm template grafana grafana/grafana -n observability -f charts-values/grafana.yaml >/dev/null
+          '
+
+      - name: Validate kustomize input
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+
+          for path in Path("k8s").rglob("*.yaml"):
+              list(yaml.safe_load_all(path.read_text()))
+          PY

@@ -1,0 +1,37 @@
+adminUser: admin
+adminPassword: admin
+
+service:
+  type: ClusterIP
+  port: 80
+
+persistence:
+  enabled: true
+  storageClassName: local-path
+  size: 5Gi
+
+plugins:
+  - victoriametrics-metrics-datasource
+  - victoriametrics-logs-datasource
+
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: VictoriaMetrics
+        uid: vm
+        type: victoriametrics-metrics-datasource
+        access: proxy
+        url: http://victoria-metrics:8428
+        isDefault: true
+      - name: VictoriaLogs
+        uid: vl
+        type: victoriametrics-logs-datasource
+        access: proxy
+        url: http://victoria-logs:9428
+      - name: VictoriaTraces
+        uid: vt
+        type: jaeger
+        access: proxy
+        url: http://victoria-traces:10428/select/jaeger
+

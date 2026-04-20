@@ -1,0 +1,16 @@
+nameOverride: vms
+
+server:
+  fullnameOverride: victoria-metrics
+  retentionPeriod: 7d
+  persistentVolume:
+    enabled: true
+    storageClassName: local-path
+    size: 20Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+

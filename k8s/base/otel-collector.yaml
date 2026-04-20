@@ -1,0 +1,136 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+data:
+  collector.yaml: |
+    extensions:
+      health_check:
+        endpoint: 0.0.0.0:13133
+
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+      prometheus:
+        config:
+          scrape_configs:
+            - job_name: checkout-api
+              scrape_interval: 5s
+              static_configs:
+                - targets: ["checkout-api:8000"]
+            - job_name: inventory-api
+              scrape_interval: 5s
+              static_configs:
+                - targets: ["inventory-api:8001"]
+            - job_name: otel-collector
+              scrape_interval: 15s
+              static_configs:
+                - targets: ["0.0.0.0:8888"]
+
+    processors:
+      batch: {}
+
+    exporters:
+      otlphttp/victoriametrics:
+        metrics_endpoint: http://victoria-metrics:8428/opentelemetry/v1/metrics
+        compression: gzip
+        encoding: proto
+      otlphttp/victorialogs:
+        logs_endpoint: http://victoria-logs:9428/insert/opentelemetry/v1/logs
+      otlphttp/victoriatraces:
+        traces_endpoint: http://victoria-traces:10428/insert/opentelemetry/v1/traces
+
+    service:
+      extensions: [health_check]
+      telemetry:
+        metrics:
+          address: 0.0.0.0:8888
+      pipelines:
+        metrics:
+          receivers: [otlp, prometheus]
+          processors: [batch]
+          exporters: [otlphttp/victoriametrics]
+        logs:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [otlphttp/victorialogs]
+        traces:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [otlphttp/victoriatraces]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: otel-collector
+  template:
+    metadata:
+      labels:
+        app: otel-collector
+    spec:
+      containers:
+        - name: otel-collector
+          image: otel/opentelemetry-collector-contrib:0.135.0
+          args: ["--config=/conf/collector.yaml"]
+          ports:
+            - containerPort: 4317
+              name: otlp-grpc
+            - containerPort: 4318
+              name: otlp-http
+            - containerPort: 8888
+              name: metrics
+            - containerPort: 13133
+              name: health
+          volumeMounts:
+            - name: config
+              mountPath: /conf
+          readinessProbe:
+            httpGet:
+              path: /
+              port: health
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /
+              port: health
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+      volumes:
+        - name: config
+          configMap:
+            name: otel-collector-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+spec:
+  selector:
+    app: otel-collector
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: otlp-grpc
+    - name: otlp-http
+      port: 4318
+      targetPort: otlp-http
+    - name: metrics
+      port: 8888
+      targetPort: metrics
+

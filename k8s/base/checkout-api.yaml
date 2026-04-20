@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: checkout-api
+  template:
+    metadata:
+      labels:
+        app: checkout-api
+    spec:
+      containers:
+        - name: checkout-api
+          image: ghcr.io/mrqs001/victoria-k3s-template-demo-app:main
+          imagePullPolicy: Always
+          command: ["uvicorn", "checkout_api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+          env:
+            - name: APP_SERVICE_NAME
+              value: checkout-api
+            - name: APP_PORT
+              value: "8000"
+            - name: APP_REDIS_URL
+              value: redis://redis:6379/0
+            - name: APP_OTLP_GRPC_ENDPOINT
+              value: http://otel-collector:4317
+            - name: APP_INVENTORY_BASE_URL
+              value: http://inventory-api:8001
+            - name: APP_SERVICE_NAMESPACE
+              value: victoria-k3s-template
+            - name: APP_DEPLOYMENT_ENVIRONMENT
+              value: local-k3s
+            - name: PYTHONUNBUFFERED
+              value: "1"
+          ports:
+            - containerPort: 8000
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: checkout-api
+spec:
+  selector:
+    app: checkout-api
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+
