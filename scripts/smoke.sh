@@ -42,7 +42,7 @@ kubectl -n "$NAMESPACE" rollout status deployment/checkout-api --timeout=180s >/
 
 kubectl -n "$NAMESPACE" port-forward svc/checkout-api "${CHECKOUT_PORT}:8000" >/tmp/victoria-checkout-pf.log 2>&1 &
 CHECKOUT_PF_PID=$!
-kubectl -n "$NAMESPACE" port-forward svc/victoria-metrics "${VM_PORT}:8428" >/tmp/victoria-metrics-pf.log 2>&1 &
+kubectl -n "$NAMESPACE" port-forward svc/victoria-metrics-http "${VM_PORT}:8428" >/tmp/victoria-metrics-pf.log 2>&1 &
 VM_PF_PID=$!
 
 cleanup() {

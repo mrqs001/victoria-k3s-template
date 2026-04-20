@@ -7,6 +7,8 @@ cd "$ROOT_DIR"
 NAMESPACE="${NAMESPACE:-observability}"
 HELM_IMAGE="${HELM_IMAGE:-alpine/helm:3.17.3}"
 KUBECONFIG_PATH="${KUBECONFIG:-$HOME/.kube/config}"
+APP_IMAGE="${APP_IMAGE:-ghcr.io/mrqs001/victoria-k3s-template-demo-app:main}"
+GHCR_SECRET_NAME="${GHCR_SECRET_NAME:-ghcr-pull}"
 
 if [[ ! -f "$KUBECONFIG_PATH" && -f /etc/rancher/k3s/k3s.yaml ]]; then
   KUBECONFIG_PATH="/etc/rancher/k3s/k3s.yaml"
@@ -42,6 +44,37 @@ need_cmd kubectl
 need_cmd docker
 
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+
+ensure_ghcr_pull_secret() {
+  if [[ "$APP_IMAGE" != ghcr.io/* ]]; then
+    return
+  fi
+
+  local registry="ghcr.io"
+  local username="${GHCR_USERNAME:-}"
+  local token="${GHCR_TOKEN:-}"
+
+  if [[ -z "$username" || -z "$token" ]]; then
+    if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+      username="$(gh api user -q .login)"
+      token="$(gh auth token)"
+    else
+      echo "APP_IMAGE points to ghcr.io but no GHCR credentials were found." >&2
+      echo "Set GHCR_USERNAME and GHCR_TOKEN, or make the package public." >&2
+      return
+    fi
+  fi
+
+  kubectl -n "$NAMESPACE" delete secret "$GHCR_SECRET_NAME" --ignore-not-found >/dev/null 2>&1 || true
+  kubectl -n "$NAMESPACE" create secret docker-registry "$GHCR_SECRET_NAME" \
+    --docker-server="$registry" \
+    --docker-username="$username" \
+    --docker-password="$token" >/dev/null
+  kubectl -n "$NAMESPACE" patch serviceaccount default --type merge \
+    -p "{\"imagePullSecrets\":[{\"name\":\"$GHCR_SECRET_NAME\"}]}" >/dev/null
+}
+
+ensure_ghcr_pull_secret
 
 helm_cmd repo add vm https://victoriametrics.github.io/helm-charts/
 helm_cmd repo add grafana https://grafana.github.io/helm-charts

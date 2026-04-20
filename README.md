@@ -100,6 +100,8 @@ This installs:
 - `checkout-api`
 - `inventory-api`
 
+The template also adds stable in-cluster `ClusterIP` services named `victoria-metrics-http`, `victoria-logs-http`, and `victoria-traces-http`. Those sit in front of the Helm-managed Victoria pods so the collector and Grafana use a predictable service path instead of relying on chart-specific headless service behavior.
+
 Override points:
 
 ```bash

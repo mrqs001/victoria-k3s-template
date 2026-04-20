@@ -1,6 +1,9 @@
 adminUser: admin
 adminPassword: admin
 
+deploymentStrategy:
+  type: Recreate
+
 service:
   type: ClusterIP
   port: 80
@@ -9,6 +12,9 @@ persistence:
   enabled: true
   storageClassName: local-path
   size: 5Gi
+
+initChownData:
+  enabled: false
 
 plugins:
   - victoriametrics-metrics-datasource
@@ -22,13 +28,13 @@ datasources:
         uid: vm
         type: victoriametrics-metrics-datasource
         access: proxy
-        url: http://victoria-metrics:8428
+        url: http://victoria-metrics-http:8428
         isDefault: true
       - name: VictoriaLogs
         uid: vl
         type: victoriametrics-logs-datasource
         access: proxy
-        url: http://victoria-logs:9428
+        url: http://victoria-logs-http:9428
         jsonData:
           derivedFields:
             - name: TraceID
@@ -59,7 +65,7 @@ datasources:
         uid: vt
         type: jaeger
         access: proxy
-        url: http://victoria-traces:10428/select/jaeger
+        url: http://victoria-traces-http:10428/select/jaeger
         jsonData:
           tracesToLogsV2:
             datasourceUid: vl
