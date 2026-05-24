@@ -199,6 +199,10 @@ The demo services are intentionally instrumented as a template, not just as plac
 - explicit child spans and span events around cache and inventory work
 - low-cardinality resource attributes suitable for VictoriaLogs stream fields
 
+## License
+
+This repository is licensed under the MIT License. External components, container images, Helm charts, and services referenced by the template retain their own licenses.
+
 ## Official References Used For This Scaffold
 
 - k3s quick start: https://docs.k3s.io/quick-start
